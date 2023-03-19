@@ -1,6 +1,5 @@
 use super::*;
 
-
 /* Needs to read the type table for struct to consume type
 #[test]
 fn struct_test () {
