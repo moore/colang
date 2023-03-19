@@ -304,13 +304,13 @@ impl Vm {
 
             Value::None => Value::None,
             Value::U32(v) => Value::U32(*v),
-            Value::StringRef{index} => return Err(VmError::InvalidOperation),
+            Value::StringRef{index: _} => return Err(VmError::InvalidOperation),
             Value::Bool(v) => Value::Bool(*v),
-            Value::Struct {field_count} => {
+            Value::Struct {field_count: _} => {
                 unreachable!()
             }, 
             Value::Table (_) => return Err(VmError::InvalidOperation),
-            Value::Cursor(CursorTypes) => return Err(VmError::InvalidOperation),
+            Value::Cursor(_) => return Err(VmError::InvalidOperation),
             Value::Function {ptr} => Value::Function { ptr:*ptr },
         };
         self.stack.push(copy);
