@@ -286,6 +286,7 @@ impl Vm {
                 };
 
                 cursor.read(&mut self.stack)?;
+                self.stack.push(Value::Cursor(cursor));
                 self.inc_op();
             },
 
