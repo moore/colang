@@ -24,7 +24,7 @@ pub enum Value {
     },
     Bool(bool),
     Struct {
-        field_count: usize,
+        field_count: u32,
     }, 
     Table (TableTypes),
     Cursor(CursorTypes),
@@ -60,7 +60,7 @@ pub enum Op {
     /// (u32 -- Table) Construct a table with given type index.
     Table,
 
-    /// (Table, Struct -- Cursor) Querying a table using the Struct
+    /// (Struct, Table -- Cursor) Querying a table using the Struct
     /// that matches the table type to constrain the query. Any Struct
     /// fields with a value of None will be considered to be free and 
     /// not constrain the query.
@@ -93,14 +93,17 @@ pub enum Op {
     /// (Cursor -- Table): Closes the cursor returning the table.
     Close,
 
+    /// ( -- None): Push None on to the stack.
+    None,
+
     /// ( -- U32): Push a U32 on to the stack.
     U32(u32),
 
     /// ( -- Value::Bool): Push a Value::Bool on to the stack
     Bool(bool),
 
-    /// (StructType .. -- Struct): Construct a new Struct
-    /// consuming stack values as defined by the StructType
+    /// (U32 .. -- Struct): Construct a new Struct
+    /// consuming stack values as defined by the U32
     Struct,    
 
     /// (U32, U32 -- U32): Add two u32 values
@@ -179,13 +182,50 @@ impl Vm {
             },
 
             Op::Pop => {
-                self.pop()?;
+                let value = self.pop()?;
+
+                if let Value::Struct { field_count } = value {
+                    let len = self.stack.len() - field_count as usize;
+                    self.stack.truncate(len);
+                }
+
                 self.inc_op();
             },
 
             Op::Swap => {
+
+                if self.stack.len() < 2 {
+                    return Err(VmError::InvalidOperation);
+                }
+
                 let last = self.stack.len() - 1;
-                self.stack.swap(last, last - 1);
+
+                let last_len = match self.stack.get(last) {
+                    Some(Value::Struct { field_count}) => *field_count + 1,
+                    _ => 1,
+                };
+
+                let second = last - last_len as usize;
+
+                let second_len = match self.stack.get(second) {
+                    Some(Value::Struct { field_count}) => *field_count + 1,
+                    _ => 1,
+                };
+
+                if last_len == 1 && second_len == 1 {
+                    self.stack.swap(last, second);
+                } else {
+                    let at = self.stack.len() - last_len as usize;
+                    let mut top = self.stack.split_off(at);
+
+                    let at = self.stack.len() - second_len as usize;
+                    let mut bottom = self.stack.split_off(at);
+
+                    dbg!(&top);
+                    dbg!(&bottom);
+                    self.stack.append(&mut top);
+                    self.stack.append(&mut bottom);
+                }
                 self.inc_op();
             },
 
@@ -195,6 +235,7 @@ impl Vm {
             },
 
             Op::Call => {
+                dbg!(&self.stack);
                 let Value::Function{ptr: index} = self.pop()? else {
                     unimplemented!()
                 };
@@ -220,7 +261,7 @@ impl Vm {
                     unimplemented!()
                 };
 
-                let at = self.stack.len() - field_count;
+                let at = self.stack.len() - field_count as usize;
                 let mut fields = self.stack.split_off(at);
 
                 let Some(Value::Table(table)) = self.stack.pop() else {
@@ -240,7 +281,12 @@ impl Vm {
             }
 
             Op::Read => {
-                todo!()
+                let Some(Value::Cursor(cursor)) = self.stack.pop() else {
+                    unimplemented!()
+                };
+
+                cursor.read(&mut self.stack)?;
+                self.inc_op();
             },
 
             Op::Insert => {
@@ -263,6 +309,11 @@ impl Vm {
                 todo!();
             }
 
+            Op::None => {
+                self.stack.push(Value::None);
+                self.inc_op();
+            },
+
             Op::U32(value) => {
                 self.stack.push(Value::U32(*value));
                 self.inc_op();
@@ -275,7 +326,12 @@ impl Vm {
             },
 
             Op::Struct => {
-                todo!();
+                let Value::U32(field_count) = self.stack.pop().unwrap() else {
+                    unreachable!();
+                };
+
+                self.stack.push(Value::Struct{field_count});
+                self.inc_op();
             },
 
             Op::AddU32 => {
@@ -331,15 +387,19 @@ impl Vm {
             frame_ptr: self.frame_ptr,
             ret_count: ret_count,
         };
-
-        self.frame_ptr = self.stack.len() - (arg_count + 1);
+        dbg!(self.stack.len());
+        dbg!(&arg_count);
+        self.frame_ptr = self.stack.len() - arg_count ;
         self.instruction_pointer = index;
         self.call_stack.push(ret);
     }
 
     fn ret(&mut self) {
         let ret = self.call_stack.pop().unwrap();
-        assert!(self.frame_ptr == (self.stack.len() -1 + ret.ret_count));
+        dbg!(&self.frame_ptr);
+        dbg!(self.stack.len());
+        dbg!(&ret.ret_count);
+        assert!(self.frame_ptr == (self.stack.len() + ret.ret_count));
         self.instruction_pointer = ret.instruction_pointer;
         self.frame_ptr = ret.frame_ptr;
     }
