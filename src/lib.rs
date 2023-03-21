@@ -25,7 +25,7 @@ pub enum Value {
     },
     Bool(bool),
     Struct {
-        field_count: u32,
+        field_count: usize,
     }, 
     Table (TableTypes),
     Cursor(CursorTypes),
@@ -194,7 +194,7 @@ impl Vm {
                 let value = self.pop()?;
 
                 if let Value::Struct { field_count } = value {
-                    let len = self.stack.len() - field_count as usize;
+                    let len = self.stack.len() - field_count;
                     self.stack.truncate(len);
                 }
 
@@ -210,7 +210,7 @@ impl Vm {
                     _ => 1,
                 };
 
-                let second = last - last_len as usize;
+                let second = last - last_len;
 
                 let second_len = match self.stack.get(second) {
                     Some(Value::Struct { field_count}) => *field_count + 1,
@@ -220,10 +220,10 @@ impl Vm {
                 if last_len == 1 && second_len == 1 {
                     self.stack.swap(last, second);
                 } else {
-                    let at = self.stack.len() - last_len as usize;
+                    let at = self.stack.len() - last_len;
                     let mut top = self.stack.split_off(at);
 
-                    let at = self.stack.len() - second_len as usize;
+                    let at = self.stack.len() - second_len;
                     let mut bottom = self.stack.split_off(at);
 
                     dbg!(&top);
@@ -255,13 +255,13 @@ impl Vm {
                 let Value::Function{ptr: index} = self.pop()? else {
                     unimplemented!()
                 };
-                let Value::U32(arg_count) = self.pop()? else {
+                let Value::Usize(arg_count) = self.pop()? else {
                     unimplemented!()
                 };
-                let Value::U32(ret_count) = self.pop()? else {
+                let Value::Usize(ret_count) = self.pop()? else {
                     unimplemented!()
                 };
-                self.call(index, arg_count as usize, ret_count as usize);
+                self.call(index, arg_count, ret_count);
             },
 
             Op::Return => {
@@ -277,7 +277,7 @@ impl Vm {
                     unimplemented!()
                 };
 
-                let at = self.stack.len() - field_count as usize;
+                let at = self.stack.len() - field_count;
                 let mut fields = self.stack.split_off(at);
 
                 let Some(Value::Table(table)) = self.stack.pop() else {
@@ -347,7 +347,7 @@ impl Vm {
             },
 
             Op::Struct => {
-                let Value::U32(field_count) = self.stack.pop().unwrap() else {
+                let Value::Usize(field_count) = self.stack.pop().unwrap() else {
                     unreachable!();
                 };
 
@@ -376,7 +376,7 @@ impl Vm {
         if let Value::Struct {field_count} = value {
             // We don't have to add one to index because
             // field count dose not include the struct value itself
-            let start = index - *field_count as usize;
+            let start = index - *field_count;
             let end = index + 1;
             for i in start..end {
                 let dup = self.copy_value(&self.stack[i])?;

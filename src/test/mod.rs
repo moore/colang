@@ -6,7 +6,7 @@
             Op::U32(1), 
             Op::U32(5), 
             Op::U32(7),
-            Op::U32(3), 
+            Op::Usize(3), 
             Op::Struct,
             Op::Pop,
             Op::Halt,
@@ -34,7 +34,7 @@
             Op::U32(1), 
             Op::U32(5), 
             Op::U32(7),
-            Op::U32(3), 
+            Op::Usize(3), 
             Op::Struct,
             Op::U32(11),
             Op::Swap,
@@ -72,7 +72,7 @@
 
             Op::U32(13), 
             Op::U32(17),
-            Op::U32(2), 
+            Op::Usize(2), 
             Op::Struct,
             Op::Swap,
             Op::Halt,
@@ -107,11 +107,11 @@
             Op::U32(1), 
             Op::U32(5), 
             Op::U32(7),
-            Op::U32(3), 
+            Op::Usize(3), 
             Op::Struct,
             Op::U32(13), 
             Op::U32(17),
-            Op::U32(2), 
+            Op::Usize(2), 
             Op::Struct,
             Op::Swap,
             Op::Pop,
@@ -176,14 +176,14 @@
             // start
             Op::None,   // Query Value
             Op::U32(0), // Query Key
-            Op::U32(2), // Struct Size
+            Op::Usize(2), // Struct Size
             Op::Struct, // Build query struct
             Op::Query,  // Run Query
             Op::Read,   // Read fn value
             Op::U32(5), // First Fn arg
             Op::U32(7), // Second Fn arg
-            Op::U32(1), // Ret count
-            Op::U32(2), // Arg count
+            Op::Usize(1), // Ret count
+            Op::Usize(2), // Arg count
             Op::Usize(6), // Function depth
             Op::CopyFrom,
             Op::Call,
