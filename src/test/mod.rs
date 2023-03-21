@@ -180,15 +180,13 @@
             Op::Struct, // Build query struct
             Op::Query,  // Run Query
             Op::Read,   // Read fn value
-            Op::U32(5),
-            Op::Swap,
-            Op::U32(7),
-            Op::Swap,
-            Op::U32(1),
-            Op::Swap,
-            Op::U32(2),
-            Op::Swap,
-            Op::Call, 
+            Op::U32(5), // First Fn arg
+            Op::U32(7), // Second Fn arg
+            Op::U32(1), // Ret count
+            Op::U32(2), // Arg count
+            Op::Usize(6), // Function depth
+            Op::CopyFrom,
+            Op::Call,
             Op::Halt,
             ];
 
@@ -205,9 +203,9 @@
         let mut vm = Vm::new(module);
 
         vm.run()?;
-        assert!(vm.stack.len() == 2);
+        assert!(vm.stack.len() == 3);
 
-        let value = match &vm.stack[1] {
+        let value = match &vm.stack[2] {
             Value::U32(v) => Some(*v),
             _ => None,
         };

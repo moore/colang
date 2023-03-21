@@ -18,6 +18,7 @@ pub enum Type {
 #[derive(Debug)]
 pub enum Value {
     None,
+    Usize(usize),
     U32(u32),
     StringRef{
         index: usize,
@@ -48,6 +49,10 @@ pub enum Op {
 
     /// (Value -- Value, Value): Copy the top value of the stack.
     Copy,
+
+    /// (usize -- Value): Copy the value from down the stack with the depth
+    ///  provided by the usize
+    CopyFrom,
 
     /// (Function, U32, U32 -- ): Call the given function ref, it is 
     /// expect to consume the number of args given by the first u32 
@@ -99,6 +104,9 @@ pub enum Op {
     /// ( -- U32): Push a U32 on to the stack.
     U32(u32),
 
+    /// ( - usize): Push a usize on to the stack.
+    Usize(usize),
+
     /// ( -- Value::Bool): Push a Value::Bool on to the stack
     Bool(bool),
 
@@ -140,7 +148,8 @@ pub struct Vm {
 
 #[derive(Debug)]
 pub enum VmError {
-    InvalidOperation
+    InvalidOperation,
+    TypeCheck,
 }
 
 impl Vm {
@@ -194,10 +203,6 @@ impl Vm {
 
             Op::Swap => {
 
-                if self.stack.len() < 2 {
-                    return Err(VmError::InvalidOperation);
-                }
-
                 let last = self.stack.len() - 1;
 
                 let last_len = match self.stack.get(last) {
@@ -230,7 +235,18 @@ impl Vm {
             },
 
             Op::Copy=> {
-                self.copy()?;
+                let index = self.stack.len() - 1;
+                self.copy(index)?;
+                self.inc_op();
+            },
+
+            Op::CopyFrom => {
+                let Value::Usize(depth) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let index = self.stack.len() - depth;
+                self.copy(index)?;
                 self.inc_op();
             },
 
@@ -320,6 +336,10 @@ impl Vm {
                 self.inc_op();
             },
 
+            Op::Usize(value) => {
+                self.stack.push(Value::Usize(*value));
+                self.inc_op();
+            },
 
             Op::Bool(value) => {
                 self.stack.push(Value::Bool(*value));
@@ -350,28 +370,38 @@ impl Vm {
         Ok(false)
     }
 
-    fn copy(&mut self) -> Result<(), VmError> {
-        let value = self.stack.last().unwrap();
+    fn copy(&mut self, index: usize) -> Result<(), VmError> {
+        let value = self.stack.get(index).unwrap();
+
         if let Value::Struct {field_count} = value {
-            // need to copy all the fields
-            todo!()
+            // We don't have to add one to index because
+            // field count dose not include the struct value itself
+            let start = index - *field_count as usize;
+            let end = index + 1;
+            for i in start..end {
+                let dup = self.copy_value(&self.stack[i])?;
+                self.stack.push(dup);
+            }
+        } else {
+            let copy = self.copy_value(value)?;
+            self.stack.push(copy);
         }
+        Ok(())
+    }
 
-        let copy = match value {
-
+    fn copy_value( &self, value: &Value) -> Result<Value, VmError> {
+        let result = match value {
             Value::None => Value::None,
             Value::U32(v) => Value::U32(*v),
+            Value::Usize(v) => Value::Usize(*v),
             Value::StringRef{index: _} => return Err(VmError::InvalidOperation),
             Value::Bool(v) => Value::Bool(*v),
-            Value::Struct {field_count: _} => {
-                unreachable!()
-            }, 
+            Value::Struct {field_count} => Value::Struct { field_count: *field_count }, 
             Value::Table (_) => return Err(VmError::InvalidOperation),
             Value::Cursor(_) => return Err(VmError::InvalidOperation),
             Value::Function {ptr} => Value::Function { ptr:*ptr },
         };
-        self.stack.push(copy);
-        Ok(())
+        Ok(result)
     }
 
     fn inc_op(&mut self) {
@@ -388,19 +418,15 @@ impl Vm {
             frame_ptr: self.frame_ptr,
             ret_count: ret_count,
         };
-        dbg!(self.stack.len());
-        dbg!(&arg_count);
-        self.frame_ptr = self.stack.len() - arg_count ;
+
+        self.frame_ptr = self.stack.len() - arg_count - 1;
         self.instruction_pointer = index;
         self.call_stack.push(ret);
     }
 
     fn ret(&mut self) {
         let ret = self.call_stack.pop().unwrap();
-        dbg!(&self.frame_ptr);
-        dbg!(self.stack.len());
-        dbg!(&ret.ret_count);
-        assert!(self.frame_ptr == (self.stack.len() + ret.ret_count));
+        assert!(self.frame_ptr + ret.ret_count == (self.stack.len() - 1));
         self.instruction_pointer = ret.instruction_pointer;
         self.frame_ptr = ret.frame_ptr;
     }
