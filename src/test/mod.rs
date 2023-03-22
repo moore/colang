@@ -60,6 +60,7 @@
         Ok(())
     }
 
+    #[test]
     fn value_copy () -> Result<(), VmError> {
         let code = vec![
             Op::U32(11), 
