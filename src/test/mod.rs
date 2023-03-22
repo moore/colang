@@ -29,6 +29,62 @@
     }
     
     #[test]
+    fn struct_copy () -> Result<(), VmError> {
+        let code = vec![
+            Op::U32(1), 
+            Op::U32(5), 
+            Op::U32(7),
+            Op::Usize(3), 
+            Op::Struct,
+            Op::Copy,
+            Op::Halt,
+            ];
+
+        let module = Module {
+            start: 0,
+            code,
+            functions: FnTable::new(),
+            types: BTreeMap::new(),
+        };
+
+        let mut vm = Vm::new(module);
+
+        vm.run()?;
+        dbg!(&vm.stack);
+        assert!(vm.stack.len() == 9);
+        assert!(Vm::eq_value(&vm.stack[1], &vm.stack[5])?);
+        assert!(Vm::eq_value(&vm.stack[2], &vm.stack[6])?);
+        assert!(Vm::eq_value(&vm.stack[3], &vm.stack[7])?);
+        assert!(Vm::eq_value(&vm.stack[4], &vm.stack[8])?);
+
+        Ok(())
+    }
+
+    fn value_copy () -> Result<(), VmError> {
+        let code = vec![
+            Op::U32(11), 
+            Op::Copy,
+            Op::Halt,
+            ];
+
+        let module = Module {
+            start: 0,
+            code,
+            functions: FnTable::new(),
+            types: BTreeMap::new(),
+        };
+
+        let mut vm = Vm::new(module);
+
+        vm.run()?;
+        dbg!(&vm.stack);
+        assert!(vm.stack.len() == 3);
+        assert!(Vm::eq_value(&vm.stack[1], &vm.stack[2])?);
+
+        Ok(())
+    }
+
+    #[test]
     fn struct_swap1 () -> Result<(), VmError> {
         let code = vec![
             Op::U32(1), 

@@ -404,6 +404,24 @@ impl Vm {
         Ok(result)
     }
 
+    fn eq_value(a: &Value, b: &Value) -> Result<bool, VmError> {
+        let result = match (a, b) {
+            (Value::None, Value::None) => false,
+            (Value::U32(x), Value::U32(y)) => *x == *y,
+            (Value::Usize(x), Value::Usize(y)) => *x == *y,
+            (Value::StringRef{index: x}, Value::StringRef{index: y}) => *x == *y,
+            (Value::Bool(x), Value::Bool(y)) => *x == *y,
+            (Value::Struct {field_count: x}, Value::Struct {field_count: y}) => 
+                *x == *y, 
+            (Value::Table (_), Value::Table (_)) => return Err(VmError::InvalidOperation),
+            (Value::Cursor(_), Value::Cursor(_)) => return Err(VmError::InvalidOperation),
+            (Value::Function {ptr: x}, Value::Function {ptr: y}) => 
+                *x == *y,
+            _ => return Err(VmError::InvalidOperation),
+        };
+        Ok(result)
+    }
+
     fn inc_op(&mut self) {
         self.instruction_pointer += 1;
     }
