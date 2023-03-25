@@ -1,0 +1,17 @@
+WHITESPACE = _{ (" " | "\t" | "\r" | "\n")+ }
+
+number = { u32 }
+u32 = @{ ASCII_DIGIT+ }
+symbol = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC*}
+value = { number | symbol}
+op = { plus }
+plus = {"+"}
+expression = {value ~ op ~ value | call | value }
+call = {symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")"}
+var = {"let" ~ symbol ~ "=" ~ expression}
+ret = {"return" ~ expression}
+statment = {(var | ret | expression) ~ ";"}
+
+function = {"fn" ~ symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")" ~ "{" ~ statment* ~ "}"}
+
+program = _{ SOI ~ function* ~ EOI }

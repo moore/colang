@@ -1,9 +1,14 @@
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
 
 mod table;
 use crate::table::*;
 
 mod typed_vm;
 use crate::typed_vm::*;
+
+mod lang;
 
 #[derive(Debug, Clone)]
 pub enum Type {
