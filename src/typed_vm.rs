@@ -1,15 +1,13 @@
 use super::*;
 
 use std::collections::BTreeMap;
-
+#[derive(Debug)]
 pub struct Module {
-    start: usize,
-    code: Vec<Op>,
-    functions: FnTable,
-    types: BTreeMap<u32,Vec<Type>>,
+    pub start: usize,
+    pub code: Vec<Op>,
+    pub functions: FnTable,
+    pub types: BTreeMap<u32,Vec<Type>>,
 }
-
-
 
 struct RetInfo {
     instruction_pointer: usize,
@@ -45,6 +43,19 @@ impl Vm {
             call_stack: Vec::new(),
             code: module.code,
         }
+    }
+
+
+    pub fn stack_len(&self) -> usize {
+        self.stack.len()
+    }
+
+    pub fn stack<'a>(&'a self) -> &'a Vec<Value> {
+        &self.stack
+    }
+
+    pub fn stack_get<'a>(&'a self, index: usize) -> Option<&'a Value> {
+        self.stack.get(index)
     }
 
     pub fn run(&mut self) -> Result<(), VmError> {
@@ -210,8 +221,31 @@ impl Vm {
                 self.inc_op();
             },
 
+            Op::F32(value) => {
+                self.stack.push(Value::F32(*value));
+                self.inc_op();
+            },
+
+            Op::F64(value) => {
+                self.stack.push(Value::F64(*value));
+                self.inc_op();
+            },
+            Op::I32(value) => {
+                self.stack.push(Value::I32(*value));
+                self.inc_op();
+            },
+
+            Op::I64(value) => {
+                self.stack.push(Value::I64(*value));
+                self.inc_op();
+            },
             Op::U32(value) => {
                 self.stack.push(Value::U32(*value));
+                self.inc_op();
+            },
+
+            Op::U64(value) => {
+                self.stack.push(Value::U64(*value));
                 self.inc_op();
             },
 
@@ -234,15 +268,24 @@ impl Vm {
                 self.inc_op();
             },
 
-            Op::AddU32 => {
-                let Value::U32(first) = self.stack.pop().unwrap() else {
-                    unreachable!();
-                };
-                let Value::U32(second) = self.stack.pop().unwrap() else {
-                    unreachable!();
+            Op::Add => {
+                let first = self.stack.pop().unwrap();
+                let second = self.stack.pop().unwrap();
+                use Value::*;
+
+                let sum = match (first, second) {
+                    (F32(a), F32(b)) => F32(a+ b),
+                    (F64(a), F64(b)) => F64(a+ b),
+
+                    (I32(a), I32(b)) => I32(a+ b),
+                    (I64(a), I64(b)) => I64(a+ b),
+
+                    (U32(a), U32(b)) => U32(a+ b),
+                    (U64(a), U64(b)) => U64(a+ b),
+                    _ => return Err(VmError::TypeCheck),
                 };
 
-                self.stack.push(Value::U32(first + second));
+                self.stack.push(sum);
                 self.inc_op();
             },
         }
@@ -271,7 +314,12 @@ impl Vm {
     fn copy_value( &self, value: &Value) -> Result<Value, VmError> {
         let result = match value {
             Value::None => Value::None,
+            Value::F32(v) => Value::F32(*v),
+            Value::F64(v) => Value::F64(*v),
+            Value::I32(v) => Value::I32(*v),
+            Value::I64(v) => Value::I64(*v),
             Value::U32(v) => Value::U32(*v),
+            Value::U64(v) => Value::U64(*v),
             Value::Usize(v) => Value::Usize(*v),
             Value::StringRef{index: _} => return Err(VmError::InvalidOperation),
             Value::Bool(v) => Value::Bool(*v),

@@ -1,9 +1,4 @@
 fn main() {
-    let a = 3;
-    let b = 11;
-    add(a, b);
+    7 + 5;
 }
 
-fn add(a, b) {
-    return a + b;
-}

@@ -28,7 +28,12 @@ pub enum Type {
 pub enum Value {
     None,
     Usize(usize),
+    F32(f32),
+    F64(f64),
     U32(u32),
+    U64(u64),
+    I32(i32),
+    I64(i64),
     StringRef{
         index: usize,
     },
@@ -43,7 +48,9 @@ pub enum Value {
     },
 }
 
+#[derive(Debug)]
 pub enum Op {
+
     /// ( -- ): Do nothing
     Noop,
 
@@ -63,15 +70,15 @@ pub enum Op {
     ///  provided by the usize
     CopyFrom,
 
-    /// (Function, U32, U32 -- ): Call the given function ref, it is 
-    /// expect to consume the number of args given by the first u32 
+    /// (Function, Usize, Usize -- ): Call the given function ref, it is 
+    /// expect to consume the number of args given by the first Usize 
     /// and return the number specified byt the second. 
     Call,
 
     /// ( -- )
     Return,
 
-    /// (u32 -- Table) Construct a table with given type index.
+    /// (Usize -- Table) Construct a table with given type index.
     Table,
 
     /// (Struct, Table -- Cursor) Querying a table using the Struct
@@ -111,7 +118,22 @@ pub enum Op {
     None,
 
     /// ( -- U32): Push a U32 on to the stack.
+    F32(f32),
+
+    /// ( -- U64): Push a U64 on to the stack.
+    F64(f64),
+
+    /// ( -- U32): Push a U32 on to the stack.
+    I32(i32),
+
+    /// ( -- U64): Push a U64 on to the stack.
+    I64(i64),
+
+    /// ( -- U32): Push a U32 on to the stack.
     U32(u32),
+
+    /// ( -- U64): Push a U64 on to the stack.
+    U64(u64),
 
     /// ( - usize): Push a usize on to the stack.
     Usize(usize),
@@ -119,12 +141,13 @@ pub enum Op {
     /// ( -- Value::Bool): Push a Value::Bool on to the stack
     Bool(bool),
 
-    /// (U32 .. -- Struct): Construct a new Struct
+    /// (Size .. -- Struct): Construct a new Struct
     /// consuming stack values as defined by the U32
     Struct,    
 
-    /// (U32, U32 -- U32): Add two u32 values
-    AddU32,
+    /// (Number<T>, Number<T> --Number<T>): Add two numbers of a matching type
+    /// and put the result with the same type on the stack.
+    Add,
 }
 
 

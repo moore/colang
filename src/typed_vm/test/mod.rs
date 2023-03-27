@@ -200,7 +200,7 @@
 
     #[test]
     fn main_test () -> Result<(), VmError> {
-        let code = vec![Op::U32(5), Op::U32(7), Op::AddU32, Op::Halt];
+        let code = vec![Op::U32(5), Op::U32(7), Op::Add, Op::Halt];
 
         let module = Module {
             start: 0,
@@ -228,7 +228,7 @@
     fn main_call () -> Result<(), VmError> {
         let code = vec![
             // fn 0
-            Op::AddU32, 
+            Op::Add, 
             Op::Return,
             // start
             Op::None,   // Query Value

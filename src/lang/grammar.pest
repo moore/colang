@@ -1,17 +1,35 @@
 WHITESPACE = _{ (" " | "\t" | "\r" | "\n")+ }
 
-number = { u32 }
-u32 = @{ ASCII_DIGIT+ }
-symbol = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC*}
-value = { number | symbol}
-op = { plus }
-plus = {"+"}
-expression = {value ~ op ~ value | call | value }
-call = {symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")"}
-var = {"let" ~ symbol ~ "=" ~ expression}
-ret = {"return" ~ expression}
-statment = {(var | ret | expression) ~ ";"}
+number = _{ F32 | F64 | U32 | U64 | I32 | I64 }
+F32 = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "f32"}
+F64 = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "f64"?}
+U32 = @{ ASCII_DIGIT+ ~ "u32"}
+U64 = @{ ASCII_DIGIT+ ~ "u64"}
+I32 = @{ ASCII_DIGIT+ ~ "i32"}
+I64 = @{ ASCII_DIGIT+ ~ "i64"?}
 
-function = {"fn" ~ symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")" ~ "{" ~ statment* ~ "}"}
+symbol = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC*}
+var = { symbol }
+
+value = _{ number | var }
+
+op = _{ add | sub | mul | div | exp }
+add = {"+"}
+sub = {"-"}
+mul = {"*"}
+div = {"/"}
+exp = {"^"}
+
+call = {symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")"}
+opperation = {value ~ op ~ value}
+expression = _{opperation | call | value }
+
+declaration = {"let" ~ symbol ~ "=" ~ expression}
+ret = {"return" ~ expression}
+statment = _{(declaration | ret | expression) ~ ";"}
+
+args = {symbol? ~ ("," ~ symbol)*}
+body = { statment* }
+function = {"fn" ~ symbol ~ "(" ~ args ~ ")" ~ "{" ~ body ~ "}"}
 
 program = _{ SOI ~ function* ~ EOI }
