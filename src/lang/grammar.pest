@@ -20,7 +20,8 @@ mul = {"*"}
 div = {"/"}
 exp = {"^"}
 
-call = {symbol ~ "(" ~ symbol? ~ ("," ~ symbol)* ~ ")"}
+params = { symbol? ~ ("," ~ symbol)* }
+call = {symbol ~ "(" ~ params ~ ")"}
 opperation = {value ~ op ~ value}
 expression = _{opperation | call | value }
 

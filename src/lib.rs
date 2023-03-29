@@ -70,9 +70,19 @@ pub enum Op {
     ///  provided by the usize
     CopyFrom,
 
-    /// (Function, Usize, Usize -- ): Call the given function ref, it is 
-    /// expect to consume the number of args given by the first Usize 
-    /// and return the number specified byt the second. 
+    /// ( usize -- Value ): Copy the var from frame offset usize to the top
+    /// of the stack.
+    Load,
+
+
+    /// ( usize Value -- Value ): Write usize frame offset with the Value.
+    /// pops the written value off the top of the stack.
+    Store,
+
+
+    /// (Usize, Usize, Function -- ): Call the given function ref. The first 
+    /// argument is the number of arguments which causes, and the second value is the number
+    /// of returned values.
     Call,
 
     /// ( -- )
@@ -116,6 +126,9 @@ pub enum Op {
 
     /// ( -- None): Push None on to the stack.
     None,
+
+    /// ( -- Fn):: Push a function pointer on the stack.
+    Fn(usize),
 
     /// ( -- U32): Push a U32 on to the stack.
     F32(f32),

@@ -9,6 +9,7 @@ pub struct Module {
     pub types: BTreeMap<u32,Vec<Type>>,
 }
 
+#[derive(Debug)]
 struct RetInfo {
     instruction_pointer: usize,
     frame_ptr: usize,
@@ -35,12 +36,18 @@ impl Vm {
         let stack = 
             vec![Value::Table(table)];
 
+        let bottom = RetInfo {
+            instruction_pointer: 0,
+            frame_ptr: 0,
+            ret_count: 0,
+        };
+
          Vm {
-            frame_ptr: module.start,
+            frame_ptr: 1,
             instruction_pointer: module.start,
             stack,
             types: module.types,
-            call_stack: Vec::new(),
+            call_stack: vec![bottom],
             code: module.code,
         }
     }
@@ -52,6 +59,10 @@ impl Vm {
 
     pub fn stack<'a>(&'a self) -> &'a Vec<Value> {
         &self.stack
+    }
+
+    pub fn code<'a>(&'a self) -> &'a Vec<Op> {
+        &self.code
     }
 
     pub fn stack_get<'a>(&'a self, index: usize) -> Option<&'a Value> {
@@ -81,12 +92,7 @@ impl Vm {
             },
 
             Op::Pop => {
-                let value = self.pop()?;
-
-                if let Value::Struct { field_count } = value {
-                    let len = self.stack.len() - field_count;
-                    self.stack.truncate(len);
-                }
+                self.pop_value()?;
 
                 self.inc_op();
             },
@@ -116,15 +122,13 @@ impl Vm {
                     let at = self.stack.len() - second_len;
                     let mut bottom = self.stack.split_off(at);
 
-                    dbg!(&top);
-                    dbg!(&bottom);
                     self.stack.append(&mut top);
                     self.stack.append(&mut bottom);
                 }
                 self.inc_op();
             },
 
-            Op::Copy=> {
+            Op::Copy => {
                 let index = self.stack.len() - 1;
                 self.copy(index)?;
                 self.inc_op();
@@ -140,8 +144,31 @@ impl Vm {
                 self.inc_op();
             },
 
+            Op::Load => {
+                let Value::Usize(offset) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let index = offset + self.frame_ptr;
+                self.copy(index)?;
+                self.inc_op();
+            },
+
+            
+            Op::Store => {
+                let Value::Usize(offset) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let to = offset + self.frame_ptr;
+                let from = self.stack.len() - 1;
+                self.store(to, from)?;
+                self.pop_value()?;
+                self.inc_op();
+            },
+            
+
             Op::Call => {
-                dbg!(&self.stack);
                 let Value::Function{ptr: index} = self.pop()? else {
                     unimplemented!()
                 };
@@ -218,6 +245,11 @@ impl Vm {
 
             Op::None => {
                 self.stack.push(Value::None);
+                self.inc_op();
+            },
+
+            Op::Fn(v) => {
+                self.stack.push(Value::Function { ptr: *v });
                 self.inc_op();
             },
 
@@ -311,6 +343,30 @@ impl Vm {
         Ok(())
     }
 
+    fn store(&mut self, to: usize, from: usize) -> Result<(), VmError> {
+        let target = self.stack.get(to).unwrap();
+        let source = self.stack.get(from).unwrap();
+
+        if !matches![Value::None, target] {
+            if ! Vm::eq_value(source, target)? {
+                return Err(VmError::TypeCheck);
+            }
+        }   
+
+        if let Value::Struct {field_count} = target {
+            let to_start = to - *field_count;
+            let from_start = from - *field_count;
+            for i in 0..*field_count {
+                let to_next = to_start + i;
+                let from_next = from_start +1;
+                self.store(to_next, from_next)?;
+            }
+        } else {
+            self.stack.swap(to, from);
+        }
+        Ok(())
+    }
+
     fn copy_value( &self, value: &Value) -> Result<Value, VmError> {
         let result = match value {
             Value::None => Value::None,
@@ -321,11 +377,17 @@ impl Vm {
             Value::U32(v) => Value::U32(*v),
             Value::U64(v) => Value::U64(*v),
             Value::Usize(v) => Value::Usize(*v),
-            Value::StringRef{index: _} => return Err(VmError::InvalidOperation),
+            Value::StringRef{index: _} => {
+                return Err(VmError::InvalidOperation)
+            },
             Value::Bool(v) => Value::Bool(*v),
             Value::Struct {field_count} => Value::Struct { field_count: *field_count }, 
-            Value::Table (_) => return Err(VmError::InvalidOperation),
-            Value::Cursor(_) => return Err(VmError::InvalidOperation),
+            Value::Table (_) => {
+                return Err(VmError::InvalidOperation)
+            },
+            Value::Cursor(_) => {
+                return Err(VmError::InvalidOperation)
+            },
             Value::Function {ptr} => Value::Function { ptr:*ptr },
         };
         Ok(result)
@@ -334,7 +396,12 @@ impl Vm {
     fn eq_value(a: &Value, b: &Value) -> Result<bool, VmError> {
         let result = match (a, b) {
             (Value::None, Value::None) => false,
+            (Value::F32(x), Value::F32(y)) => *x == *y,
+            (Value::F64(x), Value::F64(y)) => *x == *y,
+            (Value::I32(x), Value::I32(y)) => *x == *y,
+            (Value::I64(x), Value::I64(y)) => *x == *y,
             (Value::U32(x), Value::U32(y)) => *x == *y,
+            (Value::U64(x), Value::U64(y)) => *x == *y,
             (Value::Usize(x), Value::Usize(y)) => *x == *y,
             (Value::StringRef{index: x}, Value::StringRef{index: y}) => *x == *y,
             (Value::Bool(x), Value::Bool(y)) => *x == *y,
@@ -344,7 +411,9 @@ impl Vm {
             (Value::Cursor(_), Value::Cursor(_)) => return Err(VmError::InvalidOperation),
             (Value::Function {ptr: x}, Value::Function {ptr: y}) => 
                 *x == *y,
-            _ => return Err(VmError::InvalidOperation),
+            _ => {
+                return Err(VmError::InvalidOperation);
+            },
         };
         Ok(result)
     }
@@ -357,6 +426,17 @@ impl Vm {
         Ok(self.stack.pop().unwrap())
     }
 
+    fn pop_value(&mut self) -> Result<(), VmError> {
+        let value = self.pop()?;
+
+        if let Value::Struct { field_count } = value {
+            let len = self.stack.len() - field_count;
+            self.stack.truncate(len);
+        }
+
+        Ok(())
+    }
+
     fn call(&mut self, index: usize, arg_count: usize, ret_count: usize) {
         let ret = RetInfo {
             instruction_pointer: self.instruction_pointer + 1,
@@ -364,14 +444,15 @@ impl Vm {
             ret_count: ret_count,
         };
 
-        self.frame_ptr = self.stack.len() - arg_count - 1;
+        
+        self.frame_ptr = self.stack.len() - arg_count ;
         self.instruction_pointer = index;
         self.call_stack.push(ret);
     }
 
     fn ret(&mut self) {
         let ret = self.call_stack.pop().unwrap();
-        assert!(self.frame_ptr + ret.ret_count == (self.stack.len() - 1));
+        //assert!(self.frame_ptr + ret.ret_count == (self.stack.len() - 1));
         self.instruction_pointer = ret.instruction_pointer;
         self.frame_ptr = ret.frame_ptr;
     }
