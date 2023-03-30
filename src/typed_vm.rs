@@ -1,6 +1,7 @@
 use super::*;
 
 mod compile;
+use crate::typed_vm::compile::*;
 
 use std::collections::BTreeMap;
 #[derive(Debug)]

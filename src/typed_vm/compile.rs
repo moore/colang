@@ -168,7 +168,7 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
         },
 
         params => {
-            let mut parts = pair.into_inner();
+            let parts = pair.into_inner();
             for p in parts {
                 parse_pair(builder, p)?;
             }
