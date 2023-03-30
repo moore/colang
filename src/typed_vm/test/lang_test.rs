@@ -1,5 +1,5 @@
 use super::*;
-use crate::typed_vm::{Vm, VmError};
+use super::compile::*;
 
 #[derive(Debug)]
 pub enum TestError {

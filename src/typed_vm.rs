@@ -1,5 +1,7 @@
 use super::*;
 
+mod compile;
+
 use std::collections::BTreeMap;
 #[derive(Debug)]
 pub struct Module {
@@ -138,6 +140,10 @@ impl Vm {
                 let Value::Usize(depth) = self.pop()? else {
                     return Err(VmError::TypeCheck);
                 };
+                dbg!(&self.code);
+                dbg!(&self.stack);
+                dbg!(depth);
+                dbg!(self.stack.len());
 
                 let index = self.stack.len() - depth;
                 self.copy(index)?;
