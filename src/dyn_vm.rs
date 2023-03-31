@@ -303,7 +303,7 @@ impl Vm {
                     unimplemented!()
                 };
 
-                let mut scope = Scope::new();
+                let scope = Scope::new();
 
                 self.scope_stack.push(scope);
                 self.call_stack.push(self.instruction_pointer + 1);
@@ -402,14 +402,14 @@ impl Vm {
                 use Value::*;
 
                 let sum = match (first, second) {
-                    (F32(a), F32(b)) => F32(a+ b),
-                    (F64(a), F64(b)) => F64(a+ b),
+                    (F32(a), F32(b)) => F32(a + b),
+                    (F64(a), F64(b)) => F64(a + b),
 
-                    (I32(a), I32(b)) => I32(a+ b),
-                    (I64(a), I64(b)) => I64(a+ b),
+                    (I32(a), I32(b)) => I32(a + b),
+                    (I64(a), I64(b)) => I64(a + b),
 
-                    (U32(a), U32(b)) => U32(a+ b),
-                    (U64(a), U64(b)) => U64(a+ b),
+                    (U32(a), U32(b)) => U32(a + b),
+                    (U64(a), U64(b)) => U64(a + b),
                     _ => return Err(VmError::TypeCheck),
                 };
 
@@ -420,6 +420,7 @@ impl Vm {
         Ok(false)
     }
 
+     
     fn copy(&mut self, index: usize) -> Result<(), VmError> {
         let value = self.stack.get(index).unwrap();
 
@@ -429,19 +430,6 @@ impl Vm {
 
         Ok(())
     }
-
-    fn store(&mut self, to: usize, from: usize) -> Result<(), VmError> {
-        let Value::Symbol(name) = self.pop()? else {
-            return Err(VmError::TypeCheck);
-        };
-
-        let value = self.pop()?;
-        self.scope_stack.last_mut().unwrap().vars.insert(name, value);
-
-        Ok(())
-    }
-
-
     
 
     fn copy_value( &self, value: &Value) -> Result<Value, VmError> {
