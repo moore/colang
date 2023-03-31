@@ -24,7 +24,6 @@ fn call_fn () -> Result<(), TestError> {
     let file = "src/lang/example.co";
     let module = parse_colang_file(file)?;
     let mut vm = Vm::new(module);
-    dbg!(vm.code());
     vm.run()?;
 
     Ok(())
@@ -41,9 +40,9 @@ fn simple () -> Result<(), TestError> {
 
     vm.run()?;
     dbg!(vm.stack());
-    assert!(vm.stack_len() == 2);
+    assert!(vm.stack_len() == 1);
 
-    let computed = &vm.stack_get(1);
+    let computed = &vm.stack_get(0);
     let value = match computed {
         Some(Value::I64(v)) => Some(*v),
         _ => None,
@@ -65,9 +64,9 @@ fn simple_vars () -> Result<(), TestError> {
     vm.run()?;
     dbg!(vm.code());
     dbg!(vm.stack());
-    assert!(vm.stack_len() == 4);
+    assert!(vm.stack_len() == 1);
 
-    let computed = &vm.stack_get(3);
+    let computed = &vm.stack_get(0);
     let value = match computed {
         Some(Value::I64(v)) => Some(*v),
         _ => None,

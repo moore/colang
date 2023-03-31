@@ -1,7 +1,7 @@
 use super::*;
 
-//mod compile;
-//use crate::dyn_vm::compile::*;
+mod compile;
+use crate::dyn_vm::compile::*;
 
 use std::collections::BTreeMap;
 
@@ -35,10 +35,7 @@ enum Value {
     },
     Bool(bool),
     Struct(Vec<Value>), 
-    Function {
-        ptr: usize,
-        args: Vec<String>,
-    },
+    Function(usize),
 }
 
 #[derive(Debug)]
@@ -125,20 +122,15 @@ pub enum Op {
     Add,
 }
 
-#[derive(Debug)]
-pub struct FnInfo {
-    ptr: usize,
-    args: Vec<String>,
-}
 
 #[derive(Debug)]
 pub struct Module {
     pub start: usize,
     pub code: Vec<Op>,
-    pub functions: BTreeMap<String,FnInfo>,
+    pub functions: BTreeMap<String,usize>,
 }
 
-
+#[derive(Debug)]
 struct Scope {
     vars: BTreeMap<String, Value>,
 }
@@ -149,13 +141,14 @@ impl Scope {
     }
 }
 
+#[derive(Debug)]
 pub struct Vm {
     frame_ptr: usize,
     instruction_pointer: usize,
     stack: Vec<Value>,
     call_stack: Vec<usize>,
     scope_stack: Vec<Scope>,
-    functions:BTreeMap<String,FnInfo>,
+    functions:BTreeMap<String,usize>,
     code: Vec<Op>,
 }
 
@@ -282,7 +275,7 @@ impl Vm {
                 let Value::Symbol(name) = self.pop()? else {
                     return Err(VmError::TypeCheck);
                 };
-
+                
                 let value = self.pop()?;
                 let scope = self.scope_stack.last_mut().unwrap();
 
@@ -296,32 +289,21 @@ impl Vm {
                     return Err(VmError::TypeCheck);
                 };
 
-                let Some(info) = self.functions.get(&name) else {
+                let Some(ptr) = self.functions.get(&name) else {
                     return Err(VmError::UnknownFunction(name));
                 };
 
-                let value = Value::Function { 
-                    ptr: info.ptr,
-                    args: info.args.clone(),
-                };
-
-                self.stack.push(value);
+                self.stack.push(Value::Function(*ptr));
                 self.inc_op();
             },
 
 
             Op::Call => {
-                dbg!(&self.stack);
-                let Value::Function{ptr, args} = self.pop()? else {
+                let Value::Function(ptr) = self.pop()? else {
                     unimplemented!()
                 };
 
                 let mut scope = Scope::new();
-
-                for arg in args {
-                    let value = self.pop()?;
-                    scope.vars.insert(arg, value);
-                }
 
                 self.scope_stack.push(scope);
                 self.call_stack.push(self.instruction_pointer + 1);
@@ -486,9 +468,7 @@ impl Vm {
                 Value::Struct(values)
             }, 
            
-            Value::Function {ptr, args} => {
-                Value::Function { ptr:*ptr, args: args.clone() }
-            },
+            Value::Function(ptr) => Value::Function(*ptr),
         };
         Ok(result)
     }

@@ -230,12 +230,8 @@ fn main_call () -> Result<(), VmError> {
         ];
 
     let mut functions = BTreeMap::new();
-    let info = FnInfo {
-        ptr: 0,
-        args: Vec::new(),
-    };
-
-    functions.insert("add".to_string(),info);
+  
+    functions.insert("add".to_string(), 0);
 
     let module = Module {
         start: 2,
