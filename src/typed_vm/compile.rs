@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use pest::error::Error;
 use std::{fs, collections::BTreeMap};
 use crate::typed_vm::{Module};
-use crate::table::FnTable;
+use super::table::FnTable;
 
 use super::{Op};
 
