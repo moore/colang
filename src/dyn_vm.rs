@@ -73,10 +73,12 @@ pub enum Op {
     GetFn,
 
 
-    /// (Symbol -- ): Call the given function name. 
+    /// (Symbol -- ): Call the given function name.
     Call,
 
-    /// ( -- )
+
+    /// ( -- ): Pop the address of the top of the call stack and jump
+    /// to the popped address.
     Return,
 
     /// ( -- None): Push None on to the stack.
@@ -131,23 +133,18 @@ pub struct Module {
 }
 
 #[derive(Debug)]
-struct Scope {
-    vars: BTreeMap<String, Value>,
+struct CallStackEntry {
+    instruction: usize,
+    scope: BTreeMap<String, Value>
 }
 
-impl Scope {
-    fn new() -> Self {
-        Scope { vars: BTreeMap::new() }
-    }
-}
 
 #[derive(Debug)]
 pub struct Vm {
-    frame_ptr: usize,
     instruction_pointer: usize,
+    frame: BTreeMap<String, Value>,
     stack: Vec<Value>,
-    call_stack: Vec<usize>,
-    scope_stack: Vec<Scope>,
+    call_stack: Vec<CallStackEntry>,
     functions:BTreeMap<String,usize>,
     code: Vec<Op>,
 }
@@ -164,19 +161,17 @@ impl Vm {
     pub fn new(module: Module) -> Self {
         let stack = vec![];
 
-        let bottom = 0;
-
-        let global_scope = Scope {
-            vars: BTreeMap::new(),
+        let bottom = CallStackEntry { 
+            instruction: 0, 
+            scope: BTreeMap::new(),
         };
 
 
          Vm {
-            frame_ptr: 1,
             instruction_pointer: module.start,
             stack,
+            frame: BTreeMap::new(),
             call_stack: vec![bottom],
-            scope_stack: vec![global_scope],
             functions: module.functions,
             code: module.code,
         }
@@ -258,10 +253,7 @@ impl Vm {
                     return Err(VmError::TypeCheck);
                 };
 
-                let scope = self.scope_stack.last().unwrap();
-
-
-                let Some(value) = scope.vars.get(&name) else {
+                let Some(value) = self.frame.get(&name) else {
                     return Err(VmError::UnknownVar(name));
                 };
 
@@ -277,9 +269,8 @@ impl Vm {
                 };
                 
                 let value = self.pop()?;
-                let scope = self.scope_stack.last_mut().unwrap();
 
-                scope.vars.insert(name, value);
+                self.frame.insert(name, value);
 
                 self.inc_op();
             },
@@ -303,17 +294,27 @@ impl Vm {
                     unimplemented!()
                 };
 
-                let scope = Scope::new();
+                let mut frame = BTreeMap::new();
 
-                self.scope_stack.push(scope);
-                self.call_stack.push(self.instruction_pointer + 1);
+                std::mem::swap(&mut frame, &mut self.frame);
 
+                let call_value = CallStackEntry {
+                    instruction: self.instruction_pointer + 1,
+                    scope: frame,
+                };
+
+                self.call_stack.push(call_value);
+                // self.frame set to BTreeMap::new() in swap
                 self.instruction_pointer = ptr;
             },
 
             Op::Return => {
-                self.scope_stack.pop();
-                self.instruction_pointer = self.call_stack.pop().unwrap();
+                let Some(entry) = self.call_stack.pop() else {
+                    return Err(VmError::InvalidOperation);
+                };
+
+                self.frame = entry.scope;
+                self.instruction_pointer = entry.instruction;
             }
 
             

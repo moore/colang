@@ -90,7 +90,6 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
         },
 
         F32 => {
-            // (Rule::F32(s:str)) => Op::F32(parse(str))
             let v = pair.as_str().parse().unwrap();
             builder.code.push(Op::F32(v));
         },
@@ -116,11 +115,15 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
         },
 
         symbol => {
-            //Noop
-        },
-        var => {
             let name = pair.as_str();
             builder.code.push(Op::Symbol(name.to_string()));
+        },
+
+        var => {
+            let mut parts = pair.into_inner();
+            let name = parts.next().unwrap();
+            parse_pair(builder, name)?;
+
             builder.code.push(Op::Load);
 
         },
@@ -161,16 +164,12 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
         call => {
             let mut parts = pair.into_inner();
 
-            let sym = parts.next().unwrap();
+            let name = parts.next().unwrap();
             let arguments = parts.next().unwrap();
 
-            for a in arguments.into_inner() {
-                parse_pair(builder, a)?;
-            }
-
-            let name = sym.as_str();
-
-            builder.code.push(Op::Symbol(name.to_string()));
+            
+            parse_pair(builder, arguments)?;
+            parse_pair(builder, name)?;
             builder.code.push(Op::GetFn);
             builder.code.push(Op::Call);
 
@@ -184,10 +183,7 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
             let r_value = parts.next().unwrap();
 
             parse_pair(builder, r_value)?;
-
-            let name = l_value.as_str();
-
-            builder.code.push(Op::Symbol(name.to_string()));
+            parse_pair(builder, l_value)?;
             builder.code.push(Op::Store);
         },
 
@@ -195,11 +191,23 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
             for pair in pair.into_inner() {
                 parse_pair(builder, pair)?;
             }
+     
             builder.code.push(Op::Return);
         },
 
-        args => {todo!()},
-        body => {todo!()},
+   
+        args => {
+            for arg_n in pair.into_inner() {
+                parse_pair(builder, arg_n)?;
+                builder.code.push(Op::Store);
+            }
+        },
+
+        body => {
+            for statement_n in pair.into_inner() {
+                parse_pair(builder, statement_n)?;
+            }
+        },
 
         function => {
             builder.new_frame();
@@ -210,25 +218,28 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
             let fn_args = parts.next().unwrap();
             let fn_body = parts.next().unwrap();
 
-            let ptr = builder.code.len();
             let name = fn_name.as_str();
-            builder.functions.insert(name.to_string(), ptr);
+
+            new_function(builder, name)?;
 
             // Process fn args
-            for arg_n in fn_args.into_inner() {
-                let arg_name = arg_n.as_str();
-                builder.code.push(Op::Symbol(arg_name.to_string()));
-                builder.code.push(Op::Store);
-            }
+            parse_pair(builder, fn_args)?;
 
             // Process statements
-            for statement_n in fn_body.into_inner() {
-                parse_pair(builder, statement_n)?;
-            }
+            parse_pair(builder, fn_body)?;
+
             builder.code.push(Op::Return);
 
         }, 
     };
+        // program => ... BUG
     Ok(())
 }
 
+fn new_function<'a>(builder: &mut ModuleBuilder<'a>, name: &'a str) -> Result<(), LangError> {
+    let ptr = builder.code.len();
+
+    builder.functions.insert(name.to_string(), ptr);
+    
+    Ok(())
+}

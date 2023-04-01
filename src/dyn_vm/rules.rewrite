@@ -1,0 +1,33 @@
+
+f32() -> Op::F32(a2f32(self))
+f32() -> Op::F32(a2f32(self))
+u64() -> Op::U64(a2u64(self))
+u32() -> Op::U32(a2u32(self))
+i64() -> Op::I64(a2i64(self))
+i64() -> Op::I64(aif64(self))
+
+symbol() -> Op::Symbol(str(self))
+var(symbol) -> apply(symbol) Op::Load
+
+add() -> Op::Add
+sub() -> Op::Sub
+mul() -> Op::Mul
+div() -> Op::Div
+exp() -> Op::Exp
+
+params([]expression) -> each expression { apply(expression) }
+
+call(symbol params) -> apply(params) apply(symbol) Op::GetFn Op::Call
+
+opperation(lvalue op rvalue) -> apply(lvalue) apply(rvalue) apply(op)
+
+declaration(symbol expression) -> apply(expression) apply(symbol) Op::Store
+
+ret([]expression) -> for each expression { apply(expression) } Op::Return
+
+args([]symbol) -> each symbol { apply(symbol) Op::Store }
+body(statment*) each statment { apply(statment) }
+function(name, args, body) -> new_funcion(str(name)) apply(args) apply(body)
+args([]name) -> each name Op::Symbol(str(name)) Op::Store
+body([]statment) -> each statment { apply(statment)}
+program([]function) = each function { apply(function)}
