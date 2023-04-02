@@ -8,7 +8,8 @@ fn struct_pop () -> Result<(), VmError> {
         Op::U32(7),
         Op::Usize(3), 
         Op::Struct,
-        Op::Pop,
+        Op::Usize(4),
+        Op::PopN,
         Op::Halt,
         ];
 
@@ -36,7 +37,8 @@ fn struct_copy () -> Result<(), VmError> {
         Op::U32(7),
         Op::Usize(3), 
         Op::Struct,
-        Op::Copy,
+        Op::Usize(4),
+        Op::CopyMany,
         Op::Halt,
         ];
 
@@ -94,8 +96,11 @@ fn struct_swap1 () -> Result<(), VmError> {
         Op::Usize(3), 
         Op::Struct,
         Op::U32(11),
-        Op::Swap,
-        Op::Pop,
+        Op::Usize(4),
+        Op::Usize(1),
+        Op::SwapN,
+        Op::Usize(4),
+        Op::PopN,
         Op::Halt,
         ];
 
@@ -131,7 +136,9 @@ fn struct_swap2 () -> Result<(), VmError> {
         Op::U32(17),
         Op::Usize(2), 
         Op::Struct,
-        Op::Swap,
+        Op::Usize(1),
+        Op::Usize(3),
+        Op::SwapN,
         Op::Halt,
         ];
 
@@ -170,8 +177,11 @@ fn struct_swap3 () -> Result<(), VmError> {
         Op::U32(17),
         Op::Usize(2), 
         Op::Struct,
-        Op::Swap,
-        Op::Pop,
+        Op::Usize(4),
+        Op::Usize(3),
+        Op::SwapN,
+        Op::Usize(4),
+        Op::PopN,
         Op::Halt,
         ];
 
@@ -200,7 +210,7 @@ fn struct_swap3 () -> Result<(), VmError> {
 
 #[test]
 fn main_test () -> Result<(), VmError> {
-    let code = vec![Op::U32(5), Op::U32(7), Op::Add, Op::Halt];
+    let code = vec![Op::U32(5), Op::U32(7), Op::AddU32, Op::Halt];
 
     let module = Module {
         start: 0,
@@ -228,7 +238,7 @@ fn main_test () -> Result<(), VmError> {
 fn main_call () -> Result<(), VmError> {
     let code = vec![
         // fn 0
-        Op::Add, 
+        Op::AddU32, 
         Op::Return,
         // start
         Op::None,   // Query Value

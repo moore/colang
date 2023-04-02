@@ -1,8 +1,8 @@
 
 use super::*;
 
-mod compile;
-use crate::typed_vm::compile::*;
+//mod compile;
+//use crate::typed_vm::compile::*;
 
 mod table;
 use self::table::{FnTable,TableTypes,CursorTypes};
@@ -56,15 +56,29 @@ pub enum Op {
     /// (Value -- ): Remove the top value of the stack   
     Pop,
 
+    /// (Usize Value(s) -- ): Remove the top Usize values of the stack   
+    PopN,
+
     /// (Value, Value -- Value, Value): Swap the top to value of the stack.
     Swap,
+
+    /// Op::SwapN ( Usize, Usize, ... -- ...): Swaps the top and bott usize slices
+    /// of the stack.
+    SwapN,
 
     /// (Value -- Value, Value): Copy the top value of the stack.
     Copy,
 
+    /// (Usize -- Value(s) ): Copy the top usize values of the stack.
+    CopyMany,
+
     /// (usize -- Value): Copy the value from down the stack with the depth
     ///  provided by the usize
     CopyFrom,
+
+    /// (Usize Usize -- Value(s)): Copy values from down the stack with the depth
+    ///  provided by the first usize and the umber from the second.
+    CopyManyFrom,
 
     /// ( usize -- Value ): Copy the var from frame offset usize to the top
     /// of the stack.
@@ -154,9 +168,23 @@ pub enum Op {
     /// consuming stack values as defined by the U32
     Struct,    
 
-    /// (Number<T>, Number<T> --Number<T>): Add two numbers of a matching type
-    /// and put the result with the same type on the stack.
-    Add,
+    /// (F32, F32 -- F32): Add two f32s.
+    AddF32,
+
+    /// (F64, F64 -- F64): Add two f64s
+    AddF64,
+
+    /// (U32, U32 -- U32): Add two u32s.
+    AddU32,
+
+    /// (U64, U64 -- U64): Add two u64s
+    AddU64,
+
+    /// (I32, I32 -- I32): Add two i32s.
+    AddI32,
+
+    /// (I64, I64 -- I64): Add two i64s
+    AddI64,
 }
 
 
@@ -243,70 +271,104 @@ impl Vm {
 
     pub fn step(&mut self) -> Result<bool, VmError> {
         let ptr = self.instruction_pointer;
+        self.instruction_pointer += 1;
         match &self.code[ptr] {
-            Op::Noop => {
-                self.inc_op();
-            },
+            Op::Noop => {},
 
             Op::Halt => {
                 return Ok(true);
             },
 
             Op::Pop => {
-                self.pop_value()?;
+                self.pop()?;
+            },
 
-                self.inc_op();
+            Op::PopN => {
+                let Value::Usize(count) = self.pop()? else {
+                    unreachable!();
+                };
+
+                let len = self.stack.len() - count;
+                self.stack.truncate(len);
             },
 
             Op::Swap => {
 
                 let last = self.stack.len() - 1;
 
-                let last_len = match self.stack.get(last) {
-                    Some(Value::Struct { field_count}) => *field_count + 1,
-                    _ => 1,
-                };
+                let second = last - 1;
 
-                let second = last - last_len;
-
-                let second_len = match self.stack.get(second) {
-                    Some(Value::Struct { field_count}) => *field_count + 1,
-                    _ => 1,
-                };
-
-                if last_len == 1 && second_len == 1 {
-                    self.stack.swap(last, second);
-                } else {
-                    let at = self.stack.len() - last_len;
-                    let mut top = self.stack.split_off(at);
-
-                    let at = self.stack.len() - second_len;
-                    let mut bottom = self.stack.split_off(at);
-
-                    self.stack.append(&mut top);
-                    self.stack.append(&mut bottom);
-                }
-                self.inc_op();
+                self.stack.swap(last, second);
             },
 
+            Op::SwapN => {
+                let Value::Usize(top_size) = self.pop()? else {
+                    unreachable!();
+                };
+
+                let Value::Usize(bottom_size) = self.pop()? else {
+                    unreachable!();
+                };
+
+                let at = self.stack.len() - top_size;
+                let mut top = self.stack.split_off(at);
+
+                let at = self.stack.len() - bottom_size;
+                let mut bottom = self.stack.split_off(at);
+
+                self.stack.append(&mut top);
+                self.stack.append(&mut bottom);
+            }
+
             Op::Copy => {
-                let index = self.stack.len() - 1;
-                self.copy(index)?;
-                self.inc_op();
+                let value = self.stack.last().unwrap();
+                let copy = self.copy_value(value)?;
+                self.stack.push(copy);
+            },
+
+            Op::CopyMany => {
+                let Value::Usize(count) = self.pop()? else {
+                    unreachable!();
+                };
+                
+                let start = self.stack.len() - count;
+                let end = self.stack.len();
+
+                for index in start..end {
+                    let value = self.stack.get(index).unwrap();
+                    let copy = self.copy_value(value)?;
+                    self.stack.push(copy);
+                }
             },
 
             Op::CopyFrom => {
                 let Value::Usize(depth) = self.pop()? else {
                     return Err(VmError::TypeCheck);
                 };
-                dbg!(&self.code);
-                dbg!(&self.stack);
-                dbg!(depth);
-                dbg!(self.stack.len());
 
                 let index = self.stack.len() - depth;
-                self.copy(index)?;
-                self.inc_op();
+                let value = self.stack.get(index).unwrap();
+                let copy = self.copy_value(value)?;
+                self.stack.push(copy);
+            },
+
+
+            Op::CopyManyFrom => {
+                let Value::Usize(depth) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let Value::Usize(count) = self.pop()? else {
+                    unreachable!();
+                };
+
+                let end = self.stack.len() - depth;
+                let start = end - count;
+                for index in start..(end + 1) {
+                    let value = self.stack.get(index).unwrap();
+                    let copy = self.copy_value(value)?;
+                    self.stack.push(copy);
+                }
             },
 
             Op::Load => {
@@ -316,7 +378,6 @@ impl Vm {
 
                 let index = offset + self.frame_ptr;
                 self.copy(index)?;
-                self.inc_op();
             },
 
             
@@ -329,7 +390,6 @@ impl Vm {
                 let from = self.stack.len() - 1;
                 self.store(to, from)?;
                 self.pop_value()?;
-                self.inc_op();
             },
             
 
@@ -343,6 +403,7 @@ impl Vm {
                 let Value::Usize(ret_count) = self.pop()? else {
                     unimplemented!()
                 };
+
                 self.call(index, arg_count, ret_count);
             },
 
@@ -368,10 +429,7 @@ impl Vm {
 
                 let cursor = table.find(&mut fields);
 
-                self.stack.push(Value::Cursor(cursor));
-
-                self.inc_op();
-                
+                self.stack.push(Value::Cursor(cursor));                
             }
 
             Op::Found => {
@@ -385,7 +443,6 @@ impl Vm {
 
                 cursor.read(&mut self.stack)?;
                 self.stack.push(Value::Cursor(cursor));
-                self.inc_op();
             },
 
             Op::Insert => {
@@ -410,50 +467,40 @@ impl Vm {
 
             Op::None => {
                 self.stack.push(Value::None);
-                self.inc_op();
             },
 
             Op::Fn(v) => {
                 self.stack.push(Value::Function { ptr: *v });
-                self.inc_op();
             },
 
             Op::F32(value) => {
                 self.stack.push(Value::F32(*value));
-                self.inc_op();
             },
 
             Op::F64(value) => {
                 self.stack.push(Value::F64(*value));
-                self.inc_op();
             },
             Op::I32(value) => {
                 self.stack.push(Value::I32(*value));
-                self.inc_op();
             },
 
             Op::I64(value) => {
                 self.stack.push(Value::I64(*value));
-                self.inc_op();
             },
             Op::U32(value) => {
                 self.stack.push(Value::U32(*value));
-                self.inc_op();
             },
 
             Op::U64(value) => {
                 self.stack.push(Value::U64(*value));
-                self.inc_op();
             },
 
             Op::Usize(value) => {
                 self.stack.push(Value::Usize(*value));
-                self.inc_op();
             },
 
             Op::Bool(value) => {
                 self.stack.push(Value::Bool(*value));
-                self.inc_op();
             },
 
             Op::Struct => {
@@ -462,28 +509,67 @@ impl Vm {
                 };
 
                 self.stack.push(Value::Struct{field_count});
-                self.inc_op();
             },
 
-            Op::Add => {
-                let first = self.stack.pop().unwrap();
-                let second = self.stack.pop().unwrap();
-                use Value::*;
-
-                let sum = match (first, second) {
-                    (F32(a), F32(b)) => F32(a+ b),
-                    (F64(a), F64(b)) => F64(a+ b),
-
-                    (I32(a), I32(b)) => I32(a+ b),
-                    (I64(a), I64(b)) => I64(a+ b),
-
-                    (U32(a), U32(b)) => U32(a+ b),
-                    (U64(a), U64(b)) => U64(a+ b),
-                    _ => return Err(VmError::TypeCheck),
+            Op::AddF32 => {
+                let Value::F32(a) = self.pop()? else {
+                    unreachable!()
                 };
+                let Value::F32(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::F32(a+b));
+            },
 
-                self.stack.push(sum);
-                self.inc_op();
+            Op::AddF64 => {
+                let Value::F64(a) = self.pop()? else {
+                    unreachable!()
+                };
+                let Value::F64(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::F64(a+b));
+            },
+
+            
+            Op::AddU32 => {
+                let Value::U32(a) = self.pop()? else {
+                    unreachable!()
+                };
+                let Value::U32(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::U32(a+b));
+            },
+
+            Op::AddU64 => {
+                let Value::U64(a) = self.pop()? else {
+                    unreachable!()
+                };
+                let Value::U64(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::U64(a+b));
+            },
+            
+            Op::AddI32 => {
+                let Value::I32(a) = self.pop()? else {
+                    unreachable!()
+                };
+                let Value::I32(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::I32(a+b));
+            },
+
+            Op::AddI64 => {
+                let Value::I64(a) = self.pop()? else {
+                    unreachable!()
+                };
+                let Value::I64(b) = self.pop()? else {
+                    unreachable!()
+                };
+                self.stack.push(Value::I64(a+b));
             },
         }
         Ok(false)
@@ -583,10 +669,6 @@ impl Vm {
         Ok(result)
     }
 
-    fn inc_op(&mut self) {
-        self.instruction_pointer += 1;
-    }
-
     fn pop(&mut self) -> Result<Value, VmError> {
         Ok(self.stack.pop().unwrap())
     }
@@ -604,7 +686,7 @@ impl Vm {
 
     fn call(&mut self, index: usize, arg_count: usize, ret_count: usize) {
         let ret = RetInfo {
-            instruction_pointer: self.instruction_pointer + 1,
+            instruction_pointer: self.instruction_pointer,
             frame_ptr: self.frame_ptr,
             ret_count: ret_count,
         };
