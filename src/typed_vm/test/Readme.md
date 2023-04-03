@@ -1,5 +1,6 @@
 # Typed VM
 
+## Call frames
 The typed VM has an instruction set that assumes that is built for static dispatch and keeping vars on the stack using a frame pointer that can be usd with constant offsets.
 
 ```
