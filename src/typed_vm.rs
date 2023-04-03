@@ -84,11 +84,17 @@ pub enum Op {
     /// of the stack.
     Load,
 
+    /// ( usize usize -- Value(sP) ): Copy the var from frame offset usize with a size
+    /// specified by the second usize to the top
+    /// of the stack.
+    LoadN,
 
-    /// ( usize Value -- Value ): Write usize frame offset with the Value.
-    /// pops the written value off the top of the stack.
+    /// ( usize Value --  ): Write usize frame offset with the Value.
     Store,
 
+    /// ( usize usize Value(s) --  ): Write usize starting frame offset with 
+    /// the second usize number off the top of the sack.
+    StoreN,
 
     /// (Usize, Usize, Function -- ): Call the given function ref. The first 
     /// argument is the number of arguments which causes, and the second value is the number
@@ -107,7 +113,7 @@ pub enum Op {
     /// not constrain the query.
     Query,
 
-    /// (Cursor -- Cursor, bool): Returns true if the cursor is
+    /// (Cursor -- Cursor, bool): Returns true when the cursor is
     /// at a record which matches the Query
     Found,
 
@@ -373,11 +379,30 @@ impl Vm {
 
             Op::Load => {
                 let Value::Usize(offset) = self.pop()? else {
-                    return Err(VmError::TypeCheck);
+                    unreachable!()
                 };
 
                 let index = offset + self.frame_ptr;
-                self.copy(index)?;
+                let value = self.stack.get(index).unwrap();
+                let copy = self.copy_value(value)?;
+                self.stack.push(copy);
+            },
+
+            Op::LoadN => {
+                let Value::Usize(offset) = self.pop()? else {
+                    unreachable!()
+                };
+
+                let Value::Usize(count) = self.pop()? else {
+                    unreachable!()
+                };
+
+                let index = offset + self.frame_ptr;
+                for i in 0..count {
+                    let value = self.stack.get(index - i).unwrap();
+                    let copy = self.copy_value(value)?;
+                    self.stack.push(copy);
+                }
             },
 
             
@@ -388,10 +413,28 @@ impl Vm {
 
                 let to = offset + self.frame_ptr;
                 let from = self.stack.len() - 1;
-                self.store(to, from)?;
-                self.pop_value()?;
+                self.stack.swap(from, to);
+               
+                self.pop();
             },
             
+            Op::StoreN => {
+                let Value::Usize(offset) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let Value::Usize(count) = self.pop()? else {
+                    return Err(VmError::TypeCheck);
+                };
+
+                let to = offset + self.frame_ptr;
+                let from = self.stack.len() - 1;
+                for i in 0..count {
+                    self.stack.swap(from - i, to - i);
+                }
+               
+                self.stack.truncate(from - (count -1) );
+            },
 
             Op::Call => {
                 let Value::Function{ptr: index} = self.pop()? else {
@@ -404,12 +447,23 @@ impl Vm {
                     unimplemented!()
                 };
 
-                self.call(index, arg_count, ret_count);
+                let ret = RetInfo {
+                    instruction_pointer: self.instruction_pointer,
+                    frame_ptr: self.frame_ptr,
+                    ret_count: ret_count,
+                };
+        
+                
+                self.frame_ptr = self.stack.len() - arg_count ;
+                self.instruction_pointer = index;
+                self.call_stack.push(ret);
             },
 
             Op::Return => {
-                self.ret();
-            }
+                let ret = self.call_stack.pop().unwrap();
+                //assert!(self.frame_ptr + ret.ret_count == (self.stack.len() - 1));
+                self.instruction_pointer = ret.instruction_pointer;
+                self.frame_ptr = ret.frame_ptr;            }
 
             Op::Table => {
                 todo!();
@@ -574,50 +628,7 @@ impl Vm {
         }
         Ok(false)
     }
-
-    fn copy(&mut self, index: usize) -> Result<(), VmError> {
-        let value = self.stack.get(index).unwrap();
-
-        if let Value::Struct {field_count} = value {
-            // We don't have to add one to index because
-            // field count dose not include the struct value itself
-            let start = index - *field_count;
-            let end = index + 1;
-            for i in start..end {
-                let dup = self.copy_value(&self.stack[i])?;
-                self.stack.push(dup);
-            }
-        } else {
-            let copy = self.copy_value(value)?;
-            self.stack.push(copy);
-        }
-        Ok(())
-    }
-
-    fn store(&mut self, to: usize, from: usize) -> Result<(), VmError> {
-        let target = self.stack.get(to).unwrap();
-        let source = self.stack.get(from).unwrap();
-
-        if !matches![Value::None, target] {
-            if ! Vm::eq_value(source, target)? {
-                return Err(VmError::TypeCheck);
-            }
-        }   
-
-        if let Value::Struct {field_count} = target {
-            let to_start = to - *field_count;
-            let from_start = from - *field_count;
-            for i in 0..*field_count {
-                let to_next = to_start + i;
-                let from_next = from_start +1;
-                self.store(to_next, from_next)?;
-            }
-        } else {
-            self.stack.swap(to, from);
-        }
-        Ok(())
-    }
-
+    
     fn copy_value( &self, value: &Value) -> Result<Value, VmError> {
         let result = match value {
             Value::None => Value::None,
@@ -673,36 +684,7 @@ impl Vm {
         Ok(self.stack.pop().unwrap())
     }
 
-    fn pop_value(&mut self) -> Result<(), VmError> {
-        let value = self.pop()?;
 
-        if let Value::Struct { field_count } = value {
-            let len = self.stack.len() - field_count;
-            self.stack.truncate(len);
-        }
-
-        Ok(())
-    }
-
-    fn call(&mut self, index: usize, arg_count: usize, ret_count: usize) {
-        let ret = RetInfo {
-            instruction_pointer: self.instruction_pointer,
-            frame_ptr: self.frame_ptr,
-            ret_count: ret_count,
-        };
-
-        
-        self.frame_ptr = self.stack.len() - arg_count ;
-        self.instruction_pointer = index;
-        self.call_stack.push(ret);
-    }
-
-    fn ret(&mut self) {
-        let ret = self.call_stack.pop().unwrap();
-        //assert!(self.frame_ptr + ret.ret_count == (self.stack.len() - 1));
-        self.instruction_pointer = ret.instruction_pointer;
-        self.frame_ptr = ret.frame_ptr;
-    }
 }
 
 #[cfg(test)]
