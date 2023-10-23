@@ -22,7 +22,10 @@ impl From<LangError> for TestError {
 #[test]
 fn call_fn () -> Result<(), TestError> {
     let file = "src/lang/example.co";
+
     let module = parse_colang_file(file)?;
+    dbg!(&module);
+
     let mut vm = Vm::new(module);
     vm.run()?;
 
@@ -62,7 +65,7 @@ fn simple_vars () -> Result<(), TestError> {
     let mut vm = Vm::new(module);
 
     vm.run()?;
-    dbg!(vm.code());
+    //dbg!(vm.code());
     dbg!(vm.stack());
     assert!(vm.stack_len() == 1);
 

@@ -2,11 +2,12 @@
 use pest::Parser;
 use pest::iterators::Pair;
 use pest::error::Error;
-use std::{fs, collections::BTreeMap};
+use std::{fs, collections::BTreeMap, ops::Index};
 use super::{Op, Module};
 
 use crate::lang::*;
 
+use super::*;
 
 #[derive(Debug)]
 pub enum LangError {
@@ -14,6 +15,7 @@ pub enum LangError {
     ParserError(Error<Rule>),
     UnknownVar(String),
     UnknownFunction(String),
+    VarAlreadyDeclared(String),
 }
 
 impl From<pest::error::Error<Rule>> for LangError {
@@ -27,8 +29,11 @@ impl From<pest::error::Error<Rule>> for LangError {
 #[derive(Debug)]
 pub struct ModuleBuilder<'a> {
     code: Vec<Op> ,
-    functions: BTreeMap<String,usize>,
-    scope: BTreeMap<&'a str, usize>,
+    functions: BTreeMap<String,FunctionValue>,
+    scope: BTreeMap<&'a str, VarValue>,
+    arg_count: usize,
+    next_index: usize,
+    function_start: usize,
 }
 
 impl<'a> ModuleBuilder<'a> {
@@ -37,25 +42,72 @@ impl<'a> ModuleBuilder<'a> {
             code: vec![Op::Halt],
             functions: BTreeMap::new(),
             scope: BTreeMap::new(),
+            arg_count: 0,
+            next_index: 0,
+            function_start: 0,
         }
     } 
 
     pub fn new_frame(&mut self) {
         self.scope = BTreeMap::new();
+        self.next_index = 0;
+        self.arg_count = 0;
+        self.function_start = self.code.len();
     }
 
     pub fn into_module(self) -> Result<Module, LangError> {
-        let Some(fn_ptr) = self.functions.get("main") else {
+        let Some(main) = self.functions.get("main") else {
             return Err(LangError::NoMain);
         };
 
         let resulst = Module {
-            start: *fn_ptr,
+            start: main.offset,
             code: self.code,
             functions: self.functions,
         };
 
         Ok(resulst)
+    }
+
+    fn new_function(&mut self, name: &'a str)  {
+        
+        let function = FunctionValue {
+            name: name.to_string(),
+            offset: self.function_start,
+            args: self.arg_count,
+            vars: self.scope.values().map(|v|(*v).clone()).collect(),
+        };
+
+        self.functions.insert(name.to_string(), function);
+        
+    }
+
+    fn add_op(&mut self, op:Op) {
+        self.code.push(op);
+    }
+
+    fn new_var(&mut self, name: &'a str) -> Result<usize, LangError> {
+        if self.scope.contains_key(name) {
+            return Err(LangError::VarAlreadyDeclared(name.to_string()));
+        }
+
+        let index = self.next_index;
+        self.next_index += 1;
+
+        let var = VarValue {
+            name: name.to_string(),
+            index,
+            var_type: Type::Unknown,
+        };
+        self.scope.insert(name, var);
+        Ok(index)
+    }
+
+    fn get_var<'b>(&'b self, name: &str) -> Result<&'b VarValue, LangError> {
+        match self.scope.get(name) {
+            None => Err(LangError::UnknownVar(name.to_string())),
+            Some(var) => Ok(var),
+        }
     }
 }
 
@@ -122,7 +174,8 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
         var => {
             let mut parts = pair.into_inner();
             let name = parts.next().unwrap();
-            parse_pair(builder, name)?;
+            let var_value = builder.get_var(name.as_str())?;
+            builder.add_op(Op::Usize(var_value.index));
 
             builder.code.push(Op::Load);
 
@@ -167,7 +220,6 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
             let name = parts.next().unwrap();
             let arguments = parts.next().unwrap();
 
-            
             parse_pair(builder, arguments)?;
             parse_pair(builder, name)?;
             builder.code.push(Op::GetFn);
@@ -183,7 +235,9 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
             let r_value = parts.next().unwrap();
 
             parse_pair(builder, r_value)?;
-            parse_pair(builder, l_value)?;
+            let name = l_value.as_str();
+            let index = builder.new_var(name)?;
+            builder.add_op(Op::Usize(index));
             builder.code.push(Op::Store);
         },
 
@@ -198,7 +252,9 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
    
         args => {
             for arg_n in pair.into_inner() {
-                parse_pair(builder, arg_n)?;
+                let name = arg_n.as_str();
+                let index = builder.new_var(name)?;
+                builder.add_op(Op::Usize(index));
                 builder.code.push(Op::Store);
             }
         },
@@ -220,13 +276,14 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
 
             let name = fn_name.as_str();
 
-            new_function(builder, name)?;
 
             // Process fn args
             parse_pair(builder, fn_args)?;
 
             // Process statements
             parse_pair(builder, fn_body)?;
+
+            builder.new_function(name);
 
             builder.code.push(Op::Return);
 
@@ -236,10 +293,4 @@ fn parse_pair<'a>(builder: &mut ModuleBuilder<'a>, pair: Pair<'a, Rule>) -> Resu
     Ok(())
 }
 
-fn new_function<'a>(builder: &mut ModuleBuilder<'a>, name: &'a str) -> Result<(), LangError> {
-    let ptr = builder.code.len();
 
-    builder.functions.insert(name.to_string(), ptr);
-    
-    Ok(())
-}

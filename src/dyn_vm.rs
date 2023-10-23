@@ -5,22 +5,23 @@ use crate::dyn_vm::compile::*;
 
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone)]
+pub struct VarValue {
+    name: String,
+    index: usize,
+    var_type: Type,
+}
 
 #[derive(Debug, Clone)]
-enum Type {
-    None,
-    Usize,
-    U32,
-    StringRef,
-    Bool,
-    Struct(u32),
-    Table,
-    Cursor,
-    Function(u32),
+pub struct FunctionValue {
+    name: String,
+    offset: usize,
+    args: usize,
+    vars: Vec<VarValue>,
 }
 
 #[derive(Debug)]
-enum Value {
+pub enum Value {
     None,
     Usize(usize),
     F32(f32),
@@ -35,7 +36,51 @@ enum Value {
     },
     Bool(bool),
     Struct(Vec<Value>), 
-    Function(usize),
+    Function(FunctionValue),
+}
+
+impl From<Value> for Type {
+    fn from(value: Value) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<&Value> for Type {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::None => Type::None,
+            Value::Usize(_) => Type::Usize,
+            Value::F32(_) => Type::F32,
+            Value::F64(_) => Type::F64,
+            Value::U32(_) => Type::U32,
+            Value::U64(_) => Type::U64,
+            Value::I32(_) => Type::I32,
+            Value::I64(_) => Type::I64,
+            Value::Symbol(_) => Type::Symbol,
+            Value::StringRef{..} => Type::StringRef,
+            Value::Bool(_) => Type::Bool,
+            Value::Struct(fields)  => {
+                let new_fields = fields.iter()
+                    .map(|v| v.into()).collect();
+                Type::Struct(new_fields)
+            },
+            Value::Function(from) => {
+                let function = Function {
+                    name: from.name.clone(),
+                    args: vec![Type::Unknown; from.args],
+                    vars: from.vars
+                        .iter()
+                        .map(|v| 
+                            Var {
+                                name: v.name.clone(), 
+                                var_type: v.var_type.clone()
+                            })
+                        .collect(),
+                };
+                Type::Function(function)
+            },  
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -125,27 +170,28 @@ pub enum Op {
 }
 
 
+
 #[derive(Debug)]
 pub struct Module {
     pub start: usize,
     pub code: Vec<Op>,
-    pub functions: BTreeMap<String,usize>,
+    pub functions: BTreeMap<String,FunctionValue>,
 }
 
 #[derive(Debug)]
 struct CallStackEntry {
     instruction: usize,
-    scope: BTreeMap<String, Value>
+    scope: BTreeMap<usize, Value>
 }
 
 
 #[derive(Debug)]
 pub struct Vm {
     instruction_pointer: usize,
-    frame: BTreeMap<String, Value>,
+    frame: BTreeMap<usize, Value>,
     stack: Vec<Value>,
     call_stack: Vec<CallStackEntry>,
-    functions:BTreeMap<String,usize>,
+    functions:BTreeMap<String,FunctionValue>,
     code: Vec<Op>,
 }
 
@@ -153,7 +199,7 @@ pub struct Vm {
 pub enum VmError {
     InvalidOperation,
     TypeCheck,
-    UnknownVar(String),
+    UnknownVar(usize),
     UnknownFunction(String),
 }
 
@@ -207,6 +253,8 @@ impl Vm {
 
     pub fn step(&mut self) -> Result<bool, VmError> {
         let ptr = self.instruction_pointer;
+        dbg!(&self.stack);
+        dbg!(&self.code[ptr]);
         match &self.code[ptr] {
             Op::Noop => {
                 self.inc_op();
@@ -249,12 +297,12 @@ impl Vm {
             },
 
             Op::Load => {
-                let Value::Symbol(name) = self.pop()? else {
+                let Value::Usize(index) = self.pop()? else {
                     return Err(VmError::TypeCheck);
                 };
 
-                let Some(value) = self.frame.get(&name) else {
-                    return Err(VmError::UnknownVar(name));
+                let Some(value) = self.frame.get(&index) else {
+                    return Err(VmError::UnknownVar(index));
                 };
 
                 self.stack.push(self.copy_value(value)?);
@@ -264,13 +312,13 @@ impl Vm {
 
             
             Op::Store => {
-                let Value::Symbol(name) = self.pop()? else {
+                let Value::Usize(index) = self.pop()? else {
                     return Err(VmError::TypeCheck);
                 };
                 
                 let value = self.pop()?;
 
-                self.frame.insert(name, value);
+                self.frame.insert(index, value);
 
                 self.inc_op();
             },
@@ -280,17 +328,17 @@ impl Vm {
                     return Err(VmError::TypeCheck);
                 };
 
-                let Some(ptr) = self.functions.get(&name) else {
+                let Some(function) = self.functions.get(&name) else {
                     return Err(VmError::UnknownFunction(name));
                 };
 
-                self.stack.push(Value::Function(*ptr));
+                self.stack.push(Value::Function((*function).clone()));
                 self.inc_op();
             },
 
 
             Op::Call => {
-                let Value::Function(ptr) = self.pop()? else {
+                let Value::Function(function) = self.pop()? else {
                     unimplemented!()
                 };
 
@@ -305,7 +353,7 @@ impl Vm {
 
                 self.call_stack.push(call_value);
                 // self.frame set to BTreeMap::new() in swap
-                self.instruction_pointer = ptr;
+                self.instruction_pointer = function.offset;
             },
 
             Op::Return => {
@@ -413,7 +461,6 @@ impl Vm {
                     (U64(a), U64(b)) => U64(a + b),
                     _ => return Err(VmError::TypeCheck),
                 };
-
                 self.stack.push(sum);
                 self.inc_op();
             },
@@ -457,7 +504,7 @@ impl Vm {
                 Value::Struct(values)
             }, 
            
-            Value::Function(ptr) => Value::Function(*ptr),
+            Value::Function(ptr) => Value::Function((*ptr).clone()),
         };
         Ok(result)
     }

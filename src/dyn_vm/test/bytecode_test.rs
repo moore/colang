@@ -231,7 +231,14 @@ fn main_call () -> Result<(), VmError> {
 
     let mut functions = BTreeMap::new();
   
-    functions.insert("add".to_string(), 0);
+    let function = FunctionValue {
+        name: "add".to_string(),
+        offset: 0,
+        args: 2,
+        vars: Vec::new(),
+    };
+
+    functions.insert("add".to_string(), function);
 
     let module = Module {
         start: 2,

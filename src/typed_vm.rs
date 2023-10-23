@@ -4,24 +4,16 @@ use super::*;
 //mod compile;
 //use crate::typed_vm::compile::*;
 
+#[cfg(test)]
+mod test;
+
 mod table;
 use self::table::{FnTable,TableTypes,CursorTypes};
+use crate::Type;
 
-#[derive(Debug, Clone)]
-pub enum Type {
-    None,
-    Usize,
-    U32,
-    StringRef,
-    Bool,
-    Struct(u32),
-    Table,
-    Cursor,
-    Function(u32),
-}
 
 #[derive(Debug)]
-enum Value {
+pub enum Value {
     None,
     Usize(usize),
     F32(f32),
@@ -415,7 +407,7 @@ impl Vm {
                 let from = self.stack.len() - 1;
                 self.stack.swap(from, to);
                
-                self.pop();
+                self.pop()?;
             },
             
             Op::StoreN => {
@@ -686,6 +678,3 @@ impl Vm {
 
 
 }
-
-#[cfg(test)]
-mod test;
